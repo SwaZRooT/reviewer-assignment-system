@@ -1,3 +1,9 @@
+-- 0. Reset (makes this script safe to re-run; WARNING: wipes existing data)
+DROP VIEW IF EXISTS vw_reviewer_workload_status;
+DROP FUNCTION IF EXISTS assign_reviewer_atomic(INT, INT);
+DROP TABLE IF EXISTS assignments, conflicts_of_interest, papers, reviewer_profiles, users CASCADE;
+DROP FUNCTION IF EXISTS validate_reviewer_assignment();
+
 -- 1. Enable pgvector for Semantic Search
 CREATE EXTENSION IF NOT EXISTS vector;
 
@@ -67,7 +73,9 @@ BEGIN
     SELECT COUNT(*) INTO v_has_conflict FROM conflicts_of_interest WHERE reviewer_id = NEW.reviewer_id AND paper_id = NEW.paper_id;
     IF v_has_conflict > 0 THEN RAISE EXCEPTION 'Blocked: Conflict of Interest detected.'; END IF;
 
-    SELECT current_workload, max_workload INTO v_current_workload, v_max_workload FROM reviewer_profiles WHERE reviewer_id = NEW.reviewer_id;
+    -- FOR UPDATE locks the row so two simultaneous assignments cannot both slip past the cap
+    SELECT current_workload, max_workload INTO v_current_workload, v_max_workload FROM reviewer_profiles WHERE reviewer_id = NEW.reviewer_id FOR UPDATE;
+    IF NOT FOUND THEN RAISE EXCEPTION 'Blocked: User is not a registered reviewer.'; END IF;
     IF v_current_workload >= v_max_workload THEN RAISE EXCEPTION 'Blocked: Reviewer at max capacity.'; END IF;
 
     UPDATE reviewer_profiles SET current_workload = current_workload + 1 WHERE reviewer_id = NEW.reviewer_id;

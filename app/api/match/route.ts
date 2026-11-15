@@ -5,6 +5,9 @@ import { generateEmbedding } from '@/lib/embeddings';
 export async function POST(req: Request) {
   try {
     const { paper_id } = await req.json();
+    if (!Number.isInteger(paper_id)) {
+      return NextResponse.json({ error: 'Please enter a valid numeric Paper ID' }, { status: 400 });
+    }
 
     // 1. Fetch paper abstract and embedding
     const paperRes = await query('SELECT paper_id, abstract, author_id, abstract_embedding FROM papers WHERE paper_id = $1', [paper_id]);
@@ -38,12 +41,13 @@ export async function POST(req: Request) {
         (u.user_id = $3) AS is_author
       FROM reviewer_profiles rp
       JOIN users u ON u.user_id = rp.reviewer_id
-      ORDER BY similarity_score DESC;
+      ORDER BY similarity_score DESC NULLS LAST;
     `;
 
     const result = await query(matchQuery, [embedding, paper_id, paper.author_id]);
     return NextResponse.json({ matches: result.rows });
-  } catch (error: any) {
-    return NextResponse.json({ error: error.message }, { status: 500 });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    return NextResponse.json({ error: message }, { status: 500 });
   }
 }

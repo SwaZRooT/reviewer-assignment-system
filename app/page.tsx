@@ -1,9 +1,20 @@
 'use client';
 import React, { useState } from 'react';
 
+interface Candidate {
+  reviewer_id: number;
+  name: string;
+  affiliation: string;
+  current_workload: number;
+  max_workload: number;
+  similarity_score: string | null;
+  has_coi: boolean;
+  is_author: boolean;
+}
+
 export default function AssignmentDashboard() {
   const [paperId, setPaperId] = useState<string>('1');
-  const [candidates, setCandidates] = useState<any[]>([]);
+  const [candidates, setCandidates] = useState<Candidate[]>([]);
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
 
@@ -14,8 +25,8 @@ export default function AssignmentDashboard() {
       const res = await fetch('/api/init');
       const data = await res.json();
       setMessage(data.message || data.error);
-    } catch (err: any) {
-      setMessage(`Error: ${err.message}`);
+    } catch (err) {
+      setMessage(`Error: ${err instanceof Error ? err.message : String(err)}`);
     }
   };
 
@@ -27,7 +38,7 @@ export default function AssignmentDashboard() {
       const res = await fetch('/api/match', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ paper_id: parseInt(paperId) }),
+        body: JSON.stringify({ paper_id: parseInt(paperId, 10) }),
       });
       const data = await res.json();
       if (res.ok) {
@@ -36,8 +47,8 @@ export default function AssignmentDashboard() {
       } else {
         setMessage(`Error: ${data.error}`);
       }
-    } catch (err: any) {
-      setMessage(`Network error: ${err.message}`);
+    } catch (err) {
+      setMessage(`Network error: ${err instanceof Error ? err.message : String(err)}`);
     } finally {
       setLoading(false);
     }
@@ -49,7 +60,7 @@ export default function AssignmentDashboard() {
       const res = await fetch('/api/assign', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ paper_id: parseInt(paperId), reviewer_id: reviewerId }),
+        body: JSON.stringify({ paper_id: parseInt(paperId, 10), reviewer_id: reviewerId }),
       });
       const data = await res.json();
       
@@ -59,8 +70,8 @@ export default function AssignmentDashboard() {
       } else {
         setMessage(`❌ Assignment Blocked: ${data.message}`);
       }
-    } catch (err: any) {
-      setMessage(`❌ Error: ${err.message}`);
+    } catch (err) {
+      setMessage(`❌ Error: ${err instanceof Error ? err.message : String(err)}`);
     }
   };
 
@@ -124,7 +135,7 @@ export default function AssignmentDashboard() {
                     <td className="p-4 font-medium">{cand.name}</td>
                     <td className="p-4">
                       <span className="bg-blue-100 text-blue-800 px-2 py-1 rounded font-mono text-sm font-bold">
-                        {(cand.similarity_score * 100).toFixed(1)}%
+                        {cand.similarity_score === null ? 'N/A (run step 1)' : `${(Number(cand.similarity_score) * 100).toFixed(1)}%`}
                       </span>
                     </td>
                     <td className="p-4">{cand.current_workload} / {cand.max_workload}</td>

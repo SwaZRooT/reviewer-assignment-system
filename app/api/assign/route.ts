@@ -4,6 +4,9 @@ import { query } from '@/lib/db';
 export async function POST(req: Request) {
   try {
     const { paper_id, reviewer_id } = await req.json();
+    if (!Number.isInteger(paper_id) || !Number.isInteger(reviewer_id)) {
+      return NextResponse.json({ success: false, message: 'Invalid paper or reviewer ID' }, { status: 400 });
+    }
 
     // Execute PostgreSQL Stored Atomic Transaction Function
     const result = await query(
@@ -18,7 +21,8 @@ export async function POST(req: Request) {
     }
 
     return NextResponse.json({ success: true, message: outcome.message });
-  } catch (error: any) {
-    return NextResponse.json({ success: false, message: error.message }, { status: 500 });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    return NextResponse.json({ success: false, message }, { status: 500 });
   }
 }
