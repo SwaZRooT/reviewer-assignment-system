@@ -21,3 +21,5 @@ This project automates the assignment of research papers to peer reviewers using
    Run the `schema.sql` script in your PostgreSQL database to create tables and triggers.
 5. **Run the Application:**
    Run `npm run dev` and navigate to `http://localhost:3000`.
+## Documentation
+- [ER Diagram and Relational Schema](docs/ER_Diagram_and_Relational_Schema.pdf)
