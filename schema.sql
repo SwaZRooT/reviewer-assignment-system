@@ -3,16 +3,19 @@ DROP VIEW IF EXISTS vw_reviewer_workload_status;
 DROP FUNCTION IF EXISTS assign_reviewer_atomic(INT, INT);
 DROP TABLE IF EXISTS assignments, conflicts_of_interest, papers, reviewer_profiles, users CASCADE;
 DROP FUNCTION IF EXISTS validate_reviewer_assignment();
+DROP FUNCTION IF EXISTS release_reviewer_slot();
 
 -- 1. Enable pgvector for Semantic Search
 CREATE EXTENSION IF NOT EXISTS vector;
+CREATE EXTENSION IF NOT EXISTS pgcrypto;   -- used only to create bcrypt hashes for the seed users
 
 -- 2. Create Users Table (Role-based access: Admin, Reviewer, Author)
 CREATE TABLE users (
     user_id SERIAL PRIMARY KEY,
-    name VARCHAR(100) NOT NULL,
-    email VARCHAR(150) UNIQUE NOT NULL,
-    password_hash VARCHAR(255) NOT NULL,
+    name VARCHAR(100) NOT NULL CHECK (char_length(trim(name)) >= 2),
+    email VARCHAR(150) UNIQUE NOT NULL CHECK (email ~* '^[^[:space:]@]+@[^[:space:]@]+\.[^[:space:]@]+$'),
+    -- Only bcrypt hashes are accepted: a plain-text password is rejected by the database itself.
+    password_hash VARCHAR(255) NOT NULL CHECK (password_hash ~ '^\$2[aby]\$[0-9]{2}\$.{53}$'),
     role VARCHAR(20) CHECK (role IN ('admin', 'reviewer', 'author')) NOT NULL,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
@@ -86,6 +89,20 @@ $$ LANGUAGE plpgsql;
 CREATE TRIGGER trg_validate_assignment
 BEFORE INSERT ON assignments FOR EACH ROW EXECUTE FUNCTION validate_reviewer_assignment();
 
+-- 7b. Trigger: free the reviewer's slot when an assignment is completed or declined
+CREATE OR REPLACE FUNCTION release_reviewer_slot()
+RETURNS TRIGGER AS $$
+BEGIN
+    IF OLD.status = 'assigned' AND NEW.status IN ('completed', 'declined') THEN
+        UPDATE reviewer_profiles SET current_workload = GREATEST(current_workload - 1, 0) WHERE reviewer_id = NEW.reviewer_id;
+    END IF;
+    RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+CREATE TRIGGER trg_release_slot
+AFTER UPDATE OF status ON assignments FOR EACH ROW EXECUTE FUNCTION release_reviewer_slot();
+
 -- 8. Advanced Feature 2: Transaction Function
 CREATE OR REPLACE FUNCTION assign_reviewer_atomic(p_paper_id INT, p_reviewer_id INT)
 RETURNS JSON AS $$
@@ -108,10 +125,13 @@ FROM users u
 JOIN reviewer_profiles rp ON u.user_id = rp.reviewer_id;
 
 -- 10. Insert Seed Data
+-- Demo password for every seeded account: Password@123  (stored only as a bcrypt hash)
 INSERT INTO users (name, email, password_hash, role) VALUES
-('Dr. Alan Turing', 'alan@pes.edu', 'hashed_pw', 'reviewer'),
-('Dr. Ada Lovelace', 'ada@pes.edu', 'hashed_pw', 'reviewer'),
-('Alice Researcher', 'alice@pes.edu', 'hashed_pw', 'author');
+('Dr. Alan Turing',  'alan@pes.edu',  crypt('Password@123', gen_salt('bf', 10)), 'reviewer'),
+('Dr. Ada Lovelace', 'ada@pes.edu',   crypt('Password@123', gen_salt('bf', 10)), 'reviewer'),
+('Alice Researcher', 'alice@pes.edu', crypt('Password@123', gen_salt('bf', 10)), 'author'),
+('Admin One', 'admin1@pes.edu', crypt('Password@123', gen_salt('bf', 10)), 'admin'),
+('Admin Two', 'admin2@pes.edu', crypt('Password@123', gen_salt('bf', 10)), 'admin');
 
 INSERT INTO reviewer_profiles (reviewer_id, affiliation, max_workload, current_workload, expertise_text) VALUES
 (1, 'PES University', 2, 0, 'Deep learning, neural networks, computer vision, artificial intelligence'),

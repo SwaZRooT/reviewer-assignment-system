@@ -1,7 +1,11 @@
 import { NextResponse } from 'next/server';
 import { query } from '@/lib/db';
+import { requireRole } from '@/lib/auth';
 
 export async function POST(req: Request) {
+  const auth = await requireRole('admin');
+  if ('error' in auth) return auth.error;
+
   try {
     const { paper_id, reviewer_id } = await req.json();
     if (!Number.isInteger(paper_id) || !Number.isInteger(reviewer_id)) {

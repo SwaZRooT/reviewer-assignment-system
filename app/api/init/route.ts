@@ -1,8 +1,12 @@
 import { NextResponse } from 'next/server';
 import { query } from '@/lib/db';
+import { requireRole } from '@/lib/auth';
 import { generateEmbedding } from '@/lib/embeddings';
 
 export async function GET() {
+  const auth = await requireRole('admin');
+  if ('error' in auth) return auth.error;
+
   try {
     const reviewers = await query('SELECT reviewer_id, expertise_text FROM reviewer_profiles WHERE expertise_embedding IS NULL');
     let count = 0;

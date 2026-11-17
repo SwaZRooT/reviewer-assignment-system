@@ -1,8 +1,12 @@
 import { NextResponse } from 'next/server';
 import { query } from '@/lib/db';
+import { requireRole } from '@/lib/auth';
 import { generateEmbedding } from '@/lib/embeddings';
 
 export async function POST(req: Request) {
+  const auth = await requireRole('admin');
+  if ('error' in auth) return auth.error;
+
   try {
     const { paper_id } = await req.json();
     if (!Number.isInteger(paper_id)) {
